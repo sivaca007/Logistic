@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Logistic Regression</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    background: linear-gradient(135deg, #020617, #1e293b);
+    color: white;
+    font-family: Arial;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+.container {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    background: #020617;
+    border-radius: 20px;
+    width: 1150px;
+}
+.left { width: 35%; }
+.right { width: 65%; }
+
+button {
+    padding: 10px 15px;
+    background: #38bdf8;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: black;
+    font-weight: bold;
+}
+button:hover { background: #0ea5e9; }
+
+.result {
+    margin-top: 20px;
+    padding: 12px;
+    background: #0f172a;
+    border-radius: 10px;
+}
+
+canvas {
+    background: #020617;
+    border-radius: 10px;
+}
+
+.green { color: #22c55e; }
+.red { color: #ef4444; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="left">
+    <h2>Spam Classifier (Logistic Regression)</h2>
+
+    <button onclick="startSystem()">Start Training</button>
+
+    <div class="result">
+        <p>Mode: <span id="mode">Idle</span></p>
+        <p>m: <span id="m_val">0</span></p>
+        <p>c: <span id="c_val">0</span></p>
+        <p>Loss: <span id="loss_val">0</span></p>
+    </div>
+
+    <!-- 🔄 Dynamic Legend -->
+    <p id="label0" class="green">● Class 0</p>
+    <p id="label1" class="red">● Class 1</p>
+</div>
+
+<div class="right">
+    <canvas id="graph"></canvas>
+</div>
+
+</div>
+
+<script>
+const ctx = document.getElementById('graph').getContext('2d');
+
+let dataPoints = [];
+let m = 0, c = 0;
+let lr = 0.05;
+let phase = 0;
+let running = false;
+
+// Dynamic labels
+function updateLabels() {
+    if (phase === 0) {
+        document.getElementById("label0").innerText = "● Not Spam (0)";
+        document.getElementById("label1").innerText = "● Spam (1)";
+        document.getElementById("mode").innerText = "Not Spam Dominant";
+    } else {
+        document.getElementById("label0").innerText = "● Spam (0)";
+        document.getElementById("label1").innerText = "● Not Spam (1)";
+        document.getElementById("mode").innerText = "Spam Dominant";
+    }
+}
+
+// Generate dataset
+function generateData() {
+    dataPoints = [];
+
+    for (let i = 0; i < 10; i++) {
+        let x = Math.random() * 10;
+
+        let y;
+        if (phase === 0) {
+            y = x < 5 ? 0 : 1;
+        } else {
+            y = x < 5 ? 1 : 0;
+        }
+
+        dataPoints.push({x, y});
+    }
+
+    updateLabels();
+}
+
+// Sigmoid
+function sigmoid(z) {
+    return 1 / (1 + Math.exp(-z));
+}
+
+// Loss
+function computeLoss() {
+    let loss = 0;
+    dataPoints.forEach(p => {
+        let pred = sigmoid(m * p.x + c);
+        loss += (p.y - pred) ** 2;
+    });
+    return loss / dataPoints.length;
+}
+
+// Chart
+let chart = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+        datasets: [
+            { label: 'Actual', data: [], pointRadius: 10 },
+            { label: 'Prediction', data: [], pointRadius: 8 },
+            { label: 'Curve', type: 'line', data: [], borderColor: '#38bdf8', pointRadius: 0 }
+        ]
+    },
+    options: {
+        scales: {
+            x: { min: 0, max: 10, ticks: { color: "white" }},
+            y: { min: 0, max: 1, ticks: { color: "white" }}
+        },
+        plugins: {
+            legend: { labels: { color: "white" }}
+        }
+    }
+});
+
+// Update graph
+function updateGraph() {
+    let curve = [];
+    let preds = [];
+    let colors = [];
+
+    for (let x = 0; x <= 10; x += 0.1) {
+        curve.push({x: x, y: sigmoid(m * x + c)});
+    }
+
+    dataPoints.forEach(p => {
+        let prob = sigmoid(m * p.x + c);
+        preds.push({x: p.x, y: prob});
+        colors.push(prob >= 0.5 ? "#ef4444" : "#22c55e");
+    });
+
+    chart.data.datasets[0].data = dataPoints;
+    chart.data.datasets[0].backgroundColor =
+        dataPoints.map(p => p.y ? "#ef4444" : "#22c55e");
+
+    chart.data.datasets[1].data = preds;
+    chart.data.datasets[1].backgroundColor = colors;
+
+    chart.data.datasets[2].data = curve;
+
+    chart.update();
+
+    document.getElementById("m_val").innerText = m.toFixed(3);
+    document.getElementById("c_val").innerText = c.toFixed(3);
+    document.getElementById("loss_val").innerText = computeLoss().toFixed(4);
+}
+
+// Training loop
+function train() {
+    if (!running) return;
+
+    let dm = 0, dc = 0;
+
+    dataPoints.forEach(p => {
+        let pred = sigmoid(m * p.x + c);
+        let error = pred - p.y;
+
+        dm += error * p.x;
+        dc += error;
+    });
+
+    m -= lr * dm;
+    c -= lr * dc;
+
+    updateGraph();
+    requestAnimationFrame(train);
+}
+
+// Switch phase every 19 sec
+function switchPhase() {
+    phase = 1 - phase;
+    m = 0;
+    c = 0;
+    generateData();
+}
+
+// Start system
+function startSystem() {
+    running = true;
+    generateData();
+    train();
+    setInterval(switchPhase, 19000);
+}
+
+// Initial empty graph
+updateGraph();
+</script>
+
+</body>
+</html>
